@@ -1,0 +1,59 @@
+name: Foodgram UI tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ui-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Получить код проекта
+        uses: actions/checkout@v7.0.1
+
+      - name: Очистить результаты предыдущего прогона
+        run: |
+          mkdir -p allure-results
+          find allure-results -type f -delete
+
+      - name: Скачать образы Selenoid и Chrome
+        run: |
+          docker pull selenoid/chrome:128.0
+          docker compose pull selenoid
+
+      - name: Собрать образ с тестами
+        run: docker compose build tests
+
+      - name: Запустить UI-тесты через Selenoid
+        run: docker compose up --abort-on-container-exit --exit-code-from tests
+
+      - name: Сохранить логи контейнеров
+        if: always()
+        run: docker compose logs --no-color > docker-compose.log
+
+      - name: Загрузить результаты Allure
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: allure-results
+          path: allure-results/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Загрузить логи Docker Compose
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: docker-compose-logs
+          path: docker-compose.log
+          retention-days: 14
+
+      - name: Остановить контейнеры проекта
+        if: always()
+        run: docker compose down
